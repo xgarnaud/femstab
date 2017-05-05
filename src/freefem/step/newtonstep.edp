@@ -1,0 +1,102 @@
+include "params.edp"
+
+real nu0 = nu;
+
+// Define an initial mesh
+border a00(t = xmin,0		){ x = t	; y = 0		; label=3;}
+border a01(t = 0,-1		){ x = 0	; y = t		; label=3;}
+border a02(t = 0,xmax		){ x = t	; y = -1	; label=3;}
+border a1 (t = -1,1		){ x = xmax	; y = t		; label=2;} 
+border a2 (t = xmax,xmin	){ x = t	; y = 1		; label=3;} 
+border a3 (t = 1,0		){ x = xmin	; y = t		; label=4;} 
+int n=10;
+mesh Th= buildmesh(a00(10*n)+a01(n)+a02(50*n)+a1(2*n)+a2(60*n)+a3(n));
+
+plot(Th,wait= 1);
+
+// Define FE spaces
+fespace Xh(Th,P2);
+fespace Mh(Th,P1);
+
+// Import variational formulations
+int  i=0;
+include "../varf/rect/varf.edp"
+
+// Initial guess for the steady state solver
+ux0p =4*(y)*(1-y)*(y>0);
+uy0p = 0.;
+p0p  = 0.;
+
+plot(ux0p,value=1,wait = 1);
+
+// Newton iterations
+real residual = 1;
+int nmaxiter = 20;
+real tol = 1e-5;
+real t1, t2;
+
+for (int j=0;j<5;j++){
+  // Increase gradually the Reynolds number
+  real re = 1./nu0*(j+1)/5.;
+  nu = 1./re;
+  cout << 1./nu << endl;
+  // Adapt the mesh to the current initial guess
+  Th=adaptmesh(Th,[ux0p,uy0p],hmax=.25,nbvx=10000);
+  residual = 1;
+  i = 0;
+  // Perform Newton iterations until the solver converges or
+  // the maximum number of iterations is reached
+  while(residual > tol && i < nmaxiter){
+    t1 = clock();
+    NewtonNS;
+    t2 = clock();
+    ux0p = ux0p + ux0;
+    uy0p = uy0p + uy0;
+    p0p  = p0p  + p0 ;
+    residual = int2d(Th)(ux0^2+uy0^2)/int2d(Th)(ux0p^2+uy0p^2);
+    i = i +1;
+    cout << "Newton iter: " << i << "  residual  " << residual << " time to solve " << t2-t1 << endl;
+  }
+  plot(coef=0.2,cmm=" ux ",value=1, fill=1,ux0p,Th);
+ }
+
+// Save the mesh and the computed flow to load it in the linear study
+savemesh(Th,dir+"/base/mesh0.msh");
+{ ofstream file(dir+"/base/ux0.dat");
+  file << ux0p[] << endl;
+} 
+{ ofstream file(dir+"/base/uy0.dat");
+  file << uy0p[] << endl;
+} 
+{ ofstream file(dir+"/base/p0.dat");
+  file << p0p[] << endl;
+} 
+
+// Same some mesh features for plotting in python / matlab
+
+mesh Th2 = splitmesh(Th,2); // adds mid-points to the mesh in order to plot P2 fields
+savemesh(Th2,dir+"/base/mesh-2.msh");
+
+{ ofstream file(dir+"/base/coordinates.dat");
+  for (int j=0;j<Th.nv; j++) {
+    file << Th(j).x << " " << Th(j).y<< endl;}
+}
+{ ofstream file(dir+"/base/connectivity.dat");
+  int nbtriangle = Th.nt;
+  for (int i=0;i<Th.nt; i++){
+    file << Th[i][0]+1 << " " << Th[i][1]+1 << " " << Th[i][2]+1 << endl;}
+}
+
+{ ofstream file(dir+"/base/coordinates-2.dat");
+  for (int j=0;j<Th2.nv; j++) {
+    file << Th2(j).x << " " << Th2(j).y<< endl;}
+}
+
+{ ofstream file(dir+"/base/connectivity-2.dat");
+  int nbtriangle = Th2.nt;
+  for (int i=0;i<Th2.nt; i++){
+    file << Th2[i][0]+1 << " " << Th2[i][1]+1 << " " << Th2[i][2]+1 << endl;}
+}
+
+plot(coef=0.2,cmm=" ux ",value=1, fill=1,ux0p,wait = 1);
+plot(coef=0.2,cmm=" ux ",value=1, fill=1,Th,wait = 1);

@@ -1,0 +1,439 @@
+\documentclass[12pts]{article}%
+
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm,amscd}
+\usepackage{makeidx}
+\usepackage{color}
+\usepackage{bm}
+\usepackage{fullpage}
+\usepackage{hyperref,url}
+% Colors
+\def\red{\textcolor{red}} 
+\def\blue{\textcolor{blue}}
+\def\green{\textcolor{green}} 
+\def\yellow{\textcolor{yellow}}
+
+% Derivatives
+\def\p{\partial} 
+\newcommand{\der}[2]{\frac{\partial #1}{\partial #2}} 
+\newcommand{\eval}[2]{\left. #1 \right|_{#2}}
+
+% Vectors
+\def\bnabla{\bm \nabla} 
+\def\v{\bm}
+
+% Straight letters
+\def\d{\,\text{d}} 
+\def\i{\text{i}}
+\def\e{\text{e}} 
+
+% hats etc.
+\def\wt{\widetilde} 
+\def\wh{\widehat} 
+
+% parenthesis etc.
+\def\f{\frac} 
+\def\lb{\left[}  
+\def\rb{\right]} 
+\def\lcb{\left\{} 
+\def\rcb{\right\}}
+\def\lp{\left(}
+\def\rp{\right)} 
+\def\la{\left\langle} 
+\def\ra{\right\rangle}
+
+% operators
+\def\Id{\text{Id}} 
+\def\h{^\dagger}
+
+\makeindex
+
+\newenvironment{TODO}{\vspace{.25cm}\begin{center}\begin{tabular}{|p{.75\linewidth}|} \hline\\ \textbf{To do :}}
+{ \\ \\\hline \end{tabular}\end{center}\vspace{.25cm}}
+
+\begin{document}
+
+\title{Documentation}
+
+\maketitle
+
+\section{Introduction}
+
+The objective of this code is to provide a tool for quick linear
+stability studies in two dimension. It used existing codes for the
+discretization of the flow equations and for the stability
+calculations. FreeFem++ (\url{www.freefem.org/ff++}), a finite
+elements software, is used for the discretization of the non-linear
+and linearized equations. Most linear stability computations could be
+done from within FreeFem++, however the approach used here is to
+export sparse discretization matrices which can be used for stability
+analyses in python or Matlab.
+
+
+\section{Requirements}
+
+In addition to FreeFem++, using this tool requires either Matlab or
+python and the following packages. 
+
+\paragraph{numpy, scipy and matplotlib} Numpy ($>$1.5,
+\url{www.numpy.scipy.org/}) and scipy ($>$0.9, \url{www.scipy.org/})
+are required for sparse matrix computations. These provide iterative
+linear solvers and interfaces to direct linear solvers (SuperLU) and
+eigenvalue solvers (ARPACK). Matplotlib
+($>$1.0,\url{http://matplotlib.sourceforge.net/}) is a plotting
+library which allows contour plot on unstructured meshes. On Linux,
+these libraries can easily be installed using pip. On Windows and Mac,
+this libraries can be found in the Enthought EPD package
+(\url{http://www.enthought.com/products/epd.php}).
+
+\paragraph{HDF5, h5py} h5py
+(\url{http://alfven.org/wp/hdf5-for-python/}) can be used for IO. It
+allows much faster IO that using text files, and allows to easily
+import the data in Matlab.
+
+
+\paragraph{PETSc, SLEPc, mpi4py, petsc4py and slepc4py} In order to
+have a choice between more solvers, petsc4py
+($>$1.2,\url{http://code.google.com/p/petsc4py/}) and slepc4py ($>$1.2
+\url{http://code.google.com/p/slepc4py/}) can be used\footnote{PETSc
+  can for example be compiled using the following options:
+  \\\texttt{--with-mpi=yes --with-shared-libraries
+    --with-scalar-type=complex --with-fortran-interfaces=1 --CC=mpicc
+    --FC=mpif90 --FFLAGS=-I/usr/include --with-fortran
+    --with-fortran-kernels=1 --with-clanguage=c COPTFLAGS=-O3
+    FOPTFLAGS=-O3 --download-mumps --download-scalapack
+    --download-blacs --download-parmetis}}. In particular, significant
+gain in computation time have been observed using MUMPS as a linear
+solver and SLEPc's Krylov-Schur solver for eigenvalue
+computations. Using these packages, computations can be run in
+parallel provided mpi4py (\url{http://code.google.com/p/mpi4py/}) is
+installed.
+
+\section{Examples}
+
+\begin{center}
+\begin{tabular}{c|p{10cm}}
+  Directory & Description \\ \hline \hline
+  \texttt{step}   & incompressible flow over a backwards facing
+  step. Case considered e.g. by Marquet \& Sipp (7th IUTAM symposium on
+  Transition, 2009) for an optimal forcing study and by Barkley et al. (Journal of fluid mechanics, 2002) for a modal analysis\\
+  \texttt{sphere} & flow around a sphere. Case  considered e.g. by Meliga et al. (Journal of fluids and strutures, 2009)
+\end{tabular}
+\end{center}
+
+\section{Discretization}
+
+\subsection{Steady state computations}
+
+Steady states can be computed using standard P2-P1 discretization of
+the Navier--Stokes equations and a Newton method. In some cases, a
+simple initial guess is sufficient for the algorithm to converge
+(EXAMPLE). If this fails, or if finding an initial guess that
+satisfies the boundary conditions, the Reynolds number can be
+gradually increased from zero or a finite value. Several variational
+formulations can be found in \texttt{src/freefem/varf}, as described
+in table~\ref{tab:varf}. After the steady state is computed, several
+files need to be saved in \texttt{dir}:
+\begin{itemize}
+\item The mesh should be saved using the \texttt{savemesh} function,
+  can it can be loaded to generate the linear operator.
+\item The flow fields should also be saved using e.g. 
+\begin{verbatim}
+{ ofstream file(outdir+"/ux0.dat");
+  file << ux0[] << endl;
+} 
+\end{verbatim}
+\item Some information about the mesh should also be exported so that
+  data can be plotted from python / Matlab:
+\begin{verbatim}
+{ ofstream file(dir+"/base/coordinates.dat");
+  for (int j=0;j<Th.nv; j++) {
+    file << Th(j).x << " " << Th(j).y<< endl;}
+}
+{ ofstream file(dir+"/base/connectivity.dat");
+  int nbtriangle = Th.nt;
+  for (int i=0;i<Th.nt; i++){
+    file << Th[i][0]+1 << " " << Th[i][1]+1 << " " << Th[i][2]+1 << endl;}
+}
+\end{verbatim}
+  In order to plot fields discretized using P2 elements, a mesh
+  containing the midpoints is also needed: mesh Th2 = splitmesh(Th,2):
+\begin{verbatim}
+mesh Th2 = splitmesh(Th,2);
+{ ofstream file(dir+"/base/coordinates-2.dat");
+  for (int j=0;j<Th2.nv; j++) {
+    file << Th2(j).x << " " << Th2(j).y<< endl;}
+}
+
+{ ofstream file(dir+"/base/connectivity-2.dat");
+  int nbtriangle = Th2.nt;
+  for (int i=0;i<Th2.nt; i++){
+    file << Th2[i][0]+1 << " " << Th2[i][1]+1 << " " << Th2[i][2]+1 << endl;}
+}
+\end{verbatim}
+\end{itemize}
+
+\begin{table}
+\begin{center}
+\begin{tabular}{c|p{10cm}}
+  File & Description \\ \hline \hline
+  \texttt{rect/varf.edp}   & 2D incompressible Navier--Stokes (cartesian coordinates) \\
+  \texttt{rect/varf3d.edp} & 2.5D incompressible Navier--Stokes (cartesian coordinates). For non-linear computation, the flow is assumed to be parallel in the third dimension. For linear computation, a spanwize wave-number can be specified. \\
+  \texttt{axi/varf.edp} & incompressible Navier--Stokes (cylindrical coordinates). For non-linear computation, the flow is assumed to in independent on the azimuthal direction (NO SWIRL). For linear computation, an azimuthal  wave-number can be specified.
+\end{tabular}
+\caption{Variational formulations}\label{tab:varf}
+\end{center}
+\end{table}
+
+\subsection{Linear operators}
+
+The first step is to load the mesh and the results of the steady state
+computation using the same procedure used to save them.  Information
+about the state space is also required, mostly for plotting
+purposes. Assuming there are 3 velocity components, the finite element
+space is defined as
+\begin{verbatim}
+fespace Vh(Th,[P2,P2,P2,P1]);
+\end{verbatim}
+The field corresponding to each component of the state vector as well
+as the coordinate of the elements can be recovered using
+\begin{verbatim}
+Vh [iu1,iu2,iu3,iu4] = [0,1,2,3];
+Vh [u1x,u2x,u3x,u4x] = [x,x,x,x];
+Vh [u1y,u2y,u3y,u4y] = [y,y,y,y];
+\end{verbatim}
+This data should be saved using
+\begin{verbatim}
+{ofstream file(dir+"/lin/dofs.dat");
+  for (int j=0;j<iu1[].n; j++)
+    file << iu1[][j] << " "<< u1x[][j] << " " << u1y[][j] << endl;
+}
+\end{verbatim}
+The base flow should also be exported using
+\begin{verbatim}
+Vh [u1b,u2b,u3b,u4b] = [ux0,ur0,0,p0];
+{ofstream file(dir+"/lin/base.dat");
+  for (int j=0;j<iu1[].n; j++)
+    file << u1b[][j] << endl;
+}
+\end{verbatim}
+
+Matrices should be formed from the variational formulations (some
+are available, see table~\ref{tab:varf}), using e.g. for the mass
+matrix
+\begin{verbatim}
+matrix<complex> B     = Mass(Vh,Vh,tgv=tgv);
+{ofstream file(dir+"/lin/B.dat");
+  file << B <<endl;
+}
+\end{verbatim}
+Matrices can be saved as real or complex. It is important that the
+linearized operator matrix is saved as \texttt{LNS.dat} and the mass
+matrix as \texttt{B.dat}. Boundary conditions should not be included
+in the matrices but provided separately on the form
+\begin{verbatim}
+varf bcvar([ux,ur,ut,p],[vx,vr,vt,q]) = 
+  on(1,ur=1,ut=1) + on(3,4,ut=1,ur=1,ux=1);
+real[int] bcdir	= bcvar(0,Vh); 
+}
+{ofstream file(dir+"/lin/BC.dat");
+  for (int j=0;j<bcdir.n; j++)
+    file << bcdir[j] << endl;
+}
+\end{verbatim}
+
+\section{Linear stability analyses}
+
+\subsection{\texttt{FreeFEMDisc} object}
+
+After the base flow has been computed and the linear operators have
+been generated, all the data can be loaded into a python
+\texttt{FreeFEMDisc} object, defined in file
+\texttt{src/python/freefem.py} \footnote{Routines that read matrices
+  from the disc are compiled in order to save time. This compilation
+  with \texttt{f2py} (included in numpy) should be done automatically
+  the first time the module is loaded}:
+\begin{verbatim}
+import freefem as ff
+ffdisc = ff.FreeFEMdisc(dir+'/lin/')
+\end{verbatim}
+After matrices are read, components of the state vector that are not
+degrees of freedom (i.e. where Dirichlet boundary conditions are
+applied) are removed (the corresponding rows and columns are removed
+from the matrices). This allows in particular to avoid problems when
+dealing with the adjoint equations. The \texttt{FreeFEMDisc} object
+also contains information about the mesh, the fields etc. Detailed
+information can be found using in the documentation strings. Objects
+have 4 functions:
+\begin{itemize}
+\item \texttt{Save} saves the object using the pickle module. It can
+  then be loaded back using \texttt{pickle.load}
+\item \texttt{SaveHDF5} save the object using h5py. This is more
+  efficient than the previous solution both in terms if time and disk
+  space. The \texttt{.h5} file can then be used to initialize an
+  object.
+\item \texttt{PlotVar} creates contour plot for variables (real or
+  complex, with only DOFs or all elements).
+\item \texttt{GetValue} performs interpolation to extract the value of
+  a field at given points.
+\end{itemize}
+\emph{ALL THESE FUNCTIONS SHOULD BE RUN ON ONE SINGLE PROCESS}
+
+\subsection{Use of PETSc - SLEPc }
+
+By default, sparse matrices are stored using scipy's CSR
+format. Functions to convert scipy sparse matrices (sequential) to
+PETSc matrices (distributed over all process), as well as numpy arrays
+to and from PETSC vectors, are available in
+\texttt{src/python/parfemstab.py}.
+
+\begin{TODO}
+For now the matrix is distributed naively. It should be
+  interesting to use PARMETIS to do it better.
+\end{TODO}
+
+
+\subsection{Time stepping}
+
+Time stepping of the linearized equations can easily be done using a
+backwards Euler method:
+\begin{equation*}
+  (B - \delta t L) \v{q}^{n+1} = B \v{q}^n
+\end{equation*}
+The linear system is solved using a direct LU solver: the
+decomposition of $B - \delta t L$ is computed once and used at each
+iteration. The \texttt{TimeStepping} object in
+\texttt{src/python/parfemstab.py} can be used to build a PETSc shell
+matrix that performs time stepping over a given time, using either
+Crank-Nicholson\footnote{In order to ensure mass conservation, the
+  first time step is performed using Euler's method. In this case, the
+  first time step is half the next ones so that the same LU factorization
+  can be used at each iteration.} or Euler as a temporal discretization scheme. The
+adjoint time stepping is also implemented.
+
+\begin{TODO}
+Do it with Matlab / python without PETSc
+\end{TODO}
+
+
+\subsection{Optimal perturbations}
+
+The purpose of this type of studies is to determine the perturbations
+that are most amplified over a finite time interval $T$. Let $T =
+N\delta t$. 
+\begin{equation*}
+  \v q^N = \lcb (B - \delta t L)^{-1}B\rcb^N \v{q}^0 
+\end{equation*}
+
+Formally, the optimization reads
+\begin{align*}
+  \v q_{opt} &= \arg \max_{\v q_0} \f{\|\v q^N\|^2}{\|\v q^0\|^2} \\
+&= \arg \max_{\v q_0} \f{\langle \lcb (B - \delta t L)^{-1}B\rcb^N \v{q}^0  | \lcb (B - \delta t L)^{-1}B\rcb^N \v{q}^0 \rangle}{\langle \v q^0 | \v q^0\rangle} \\
+&= \arg \max_{\v q_0} \f{{\v{q}^0}\h\lb\lcb (B - \delta t L)^{-1}B\rcb^N\rb\h  Q \lcb (B - \delta t L)^{-1}B\rcb^N \v{q}^0 }{{\v q^0}\h Q {\v q^0}\h}
+\end{align*}
+For the incompressible Navier--Stokes equation, the initial pressure
+field is unimportant. Let $\wt{\v q}$ be a state vector containing
+only velocity degrees of freedom, and $P$ be the operator that turns
+$\wt{\v q}$ into a state vector containing velocity and pressure DOFs
+(pressure being zero). Then
+\begin{align*}
+  \v q_{opt} = P\arg \max_{\v q_0} \f{\wt{\v{q}^0}\h P\h\lb\lcb (B - \delta t L)^{-1}B\rcb^N\rb\h  Q \lcb (B - \delta t L)^{-1}B\rcb^N P \wt{\v{q}^0} }{\wt{\v q^0}\h P\h Q P \wt{\v q^0}}
+\end{align*}
+and $\wt Q = P\h Q P$ is Hermitian positive definite. Let $\wt Q = M\h M$ be its Cholesky decomposition.
+\begin{align*}
+  \v q_{opt} &= PM^{-1} \arg \max_{\v r_0} \f{\wt{\v{r}^0}\h M^{-\dagger} P\h\lb\lcb (B - \delta t L)^{-1}B\rcb^N\rb\h  Q \lcb (B - \delta t L)^{-1}B\rcb^N P M^{-1}\wt{\v{r}^0} }{\wt{\v r^0}\h\wt{\v r^0}}\\
+  & = PM^{-1} \wt{\v r_{opt}} 
+\end{align*}
+In the definition of $\wt{\v r_{opt}} $, one can see a Rayleigh
+quotient. $\wt{\v r_{opt}}$ is therefore the leading eigenvector of
+\begin{equation*}
+M^{-\dagger} P\h\lb\lcb (B - \delta t L)^{-1}B\rcb^N\rb\h  Q \lcb (B - \delta t L)^{-1}B\rcb^N P M^{-1}\wt{\v{r}_{opt}} = \lambda\wt{\v{r}_{opt}} 
+\end{equation*}
+and therefore
+\begin{align*}
+ M^{-1} M^{-\dagger} P\h\lb\lcb (B - \delta t L)^{-1}B\rcb^N\rb\h  Q \lcb (B - \delta t L)^{-1}B\rcb^N P M^{-1}\wt{\v{r}_{opt}} &= \lambda M^{-1} \wt{\v{r}_{opt}} \\ 
+ M^{-1} M^{-\dagger} P\h\lb\lcb (B - \delta t L)^{-1}B\rcb^N\rb\h  Q \lcb (B - \delta t L)^{-1}B\rcb^N P\wt{\v{q}_{opt}} &= \lambda \wt{\v{q}_{opt}} \\
+ \underbrace{\wt{Q}^{-1} P\h\lb\lcb (B - \delta t L)^{-1}B\rcb^N\rb\h  Q \lcb (B - \delta t L)^{-1}B\rcb^N P}_{\mathcal L_{o.p.}}\wt{\v{q}_{opt}} &= \lambda \wt{\v{q}_{opt}}
+\end{align*}
+In order to find the leading eigenvector of $\mathcal L_{o.p.}$ using
+and iterative solver, one only need to apply it to vectors. This only
+requires direct and adjoint time stepper, and a linear solver to apply
+$\wt{Q}^{-1}$. The latter can be done using a Cholesky
+decomposition. The \texttt{OptimalPerturbations} object in
+\texttt{src/python/parfemstab.py} can be used to build a PETSc shell
+matrix corresponding to $\mathcal L_{o.p.}$. Its leading eigenvalue
+can then be computed using function \texttt{OptimalPerturbationsSLEPc}
+in the same file. An example of the whole process can be found in
+\texttt{src/python/tgpar.py}.
+
+\begin{TODO}
+Do it with Matlab / python without PETSc
+\end{TODO}
+
+\subsection{Eigenmodes}
+
+Eigenmodes are solutions of the evolution equation of the form $\v
+q(x,y;t) = \wt{\v q}(x,y) \exp(-\i\omega t)$. They are therefore
+solution of
+\begin{equation*}
+  -\i\omega B \wt{\v q} = L \wt{\v q}
+\end{equation*}
+i.e. they correspond to generalized eigenvectors of the pair
+$(L,B)$. Computation of all eigenvectors is not feasible. The standard
+approach is to compute only a few eigenmodes, for example those
+associated with eigenvalues that lie closest to a shift parameter
+$\sigma$ in the complex plane. For this, the simplest method is to use
+the shift-invert spectral transformation together with an iterative
+eigenvalue solver. Several possibilities are implemented:
+\begin{itemize}
+\item \texttt{DirectMode} in \texttt{src/python/femstab.py} uses ARPACK
+  and superLU through scipy.
+\item \texttt{DirectModeSLEPc} in \texttt{src/python/femstab.py} uses on
+  of SLEPc's iterative eigenvalue solvers (Krylov-Schur by default,
+  possibly ARPACK) and one of the linear solvers installed in PETSc
+  (direct or iterative, selected as a command-line argument). This
+  approach is more effective, in particular concerning the convergence
+  of the Krylov-Schur method compared to the IRAM.
+\item \texttt{DirectModeSLEPc} in \texttt{src/python/parfemstab,py}
+  does the same thing in \emph{parallel}. Note that PETSc's default linear
+  solver is sequential.
+\end{itemize}
+These computations can be run from the scripts
+\texttt{src/python/modes.py} in sequential or
+\texttt{src/python/modespar.py} in parallel.
+
+\subsection{Optimal forcing}
+
+The purpose of this type of studies is to determine the harmonic
+forcing at a frequency $\omega$ that results in the largest time
+harmonic response. Let $\wt{\v f}$ be a forcing vector such that the evolution equation reads
+\begin{equation*}
+  B\dot{\v q} = L\v q + B_2P\wt{\v{f}}\exp(-\i\omega t) 
+\end{equation*}
+then the time harmonic response reads
+\begin{equation*}
+  \v q = -( \i\omega B + \delta t L)^{-1}B_2P\wt{\v{f}} 
+\end{equation*}
+
+The same analysis as in the case of optimal perturbations gives
+\begin{align*}
+  \underbrace{\wt{Q}^{-1} P\h B_2\h ( \i\omega B + \delta t
+    L)^{-\dagger} Q ( \i\omega B + \delta t L)^{-1} B_2 P}_{\mathcal
+    L_{o.f.}}\wt{\v{f}_{opt}} = \mu \wt{\v{f}_{opt}}
+\end{align*} 
+
+This analysis is implemented in
+\begin{itemize}
+\item \texttt{FR} in \texttt{src/python/femstab.py} uses ARPACK
+  and superLU through scipy.
+\end{itemize}
+These computations can be run from the scripts
+\texttt{src/python/fr.py} in sequential.
+
+\begin{TODO}
+  DO it with PETSc in //
+\end{TODO}
+
+\end{document}

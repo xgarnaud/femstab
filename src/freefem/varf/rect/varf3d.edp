@@ -1,0 +1,94 @@
+// Variational formulations for NS equations in cartesian coordinates 
+// 3 velocity components
+// spanwise invariance for non-linear problems (-> 2d)
+// spanwise wave number kz for linear problems, i.e. u(u,x,y) = U(u,y) e^(i*kz*z)
+ 
+Xh<complex> uy,vy;
+Xh<complex> ux,vx; 
+Xh<complex> uz,vz; 
+Mh<complex> p,q;
+Xh<complex> upx,upy,upz; 
+
+Xh ux0,uy0,uz0;
+Mh p0;
+Xh ux0p,uy0p,uz0p; 
+Mh p0p;
+Xh ux0b,uy0b,uz0b; 
+Xh ux0pb,uy0pb,uz0pb; 
+Xh vx0,vy0,vz0;
+Mh q0;
+
+// Stokes problem
+problem Stokes([ux0,uy0,uz0,p0],[vx0,vy0,vz0,q0]) =
+  int2d(Th)(  nu * ( 
+		    dx(ux0)*dx(vx0) + dy(ux0)*dy(vx0)
+		    + dx(uy0)*dx(vy0) + dy(uy0)*dy(vy0)
+		    + dx(uz0)*dx(vz0) + dy(uz0)*dy(vz0)
+		     )
+	      - p0*dx(vx0)- p0*dy(vy0) 
+	      + dx(ux0)*q0+ dy(uy0)*q0 
+	      + p0*q0*(0.000001) 
+	      )
+  + on(3, ux0=0., uy0=0., uz0 = 0.)	
+  + on(4, ux0=0., uy0=-1., uz0 = 1.)		
+  ;
+
+// Newton iteration for Navier-Stokes
+problem NewtonNS([ux0,uy0,uz0,p0],[vx0,vy0,vz0,q0]) =
+  int2d(Th)(    ( ux0p*dx(ux0) + uy0p*dy(ux0) )*vx0
+		+ ( ux0p*dx(uy0) + uy0p*dy(uy0) )*vy0
+		+ ( ux0p*dx(uz0) + uy0p*dy(uz0) )*vz0
+		+ ( ux0*dx(ux0p) + uy0*dy(ux0p) )*vx0
+		+ ( ux0*dx(uy0p) + uy0*dy(uy0p) )*vy0
+		+ ( ux0*dx(uz0p) + uy0*dy(uz0p) )*vz0
+		+ nu * ( 
+		        dx(ux0)*dx(vx0) + dy(ux0)*dy(vx0)
+			+ dx(uy0)*dx(vy0) + dy(uy0)*dy(vy0)
+			+ dx(uz0)*dx(vz0) + dy(uz0)*dy(vz0)
+			 )
+		- p0*dx(vx0)- p0*dy(vy0) 
+		+ dx(ux0)*q0+ dy(uy0)*q0 
+		+ p0*q0*(0.000001) 
+		)
+  + int2d(Th)(  ( ux0p*dx(ux0p) + uy0p*dy(ux0p))*vx0
+		+ ( ux0p*dx(uy0p) + uy0p*dy(uy0p))*vy0
+		+ ( ux0p*dx(uz0p) + uy0p*dy(uz0p))*vz0
+		+ nu * ( 
+		        dx(ux0p)*dx(vx0) + dy(ux0p)*dy(vx0)
+			+ dx(uy0p)*dx(vy0) + dy(uy0p)*dy(vy0)
+			+ dx(uz0p)*dx(vz0) + dy(uz0p)*dy(vz0)
+			 )
+		- p0p*dx(vx0)- p0p*dy(vy0) 
+		+ dx(ux0p)*q0+ dy(uy0p)*q0 
+		+ p0p*q0*(0.000001) 
+		)
+  + on(3, ux0=0., uy0=0., uz0 = 0.)	
+  + on(4, ux0=0., uy0=0., uz0 = 0.)		
+  ;
+
+// Linearized Navier-Stokes operator
+varf LNS ([ux,uy,uz,p],[vx,vy,vz,q]) =
+  int2d(Th)(
+	    - ( ux0*dx(ux) + uy0*dy(ux) + uz0*1i*kz*ux + ux*dx(ux0) + uy*dy(ux0))*vx
+	    - ( ux0*dx(uy) + uy0*dy(uy) + uz0*1i*kz*uy + ux*dx(uy0) + uy*dy(uy0))*vy
+	    - ( ux0*dx(uz) + uy0*dy(uz) + uz0*1i*kz*uz + ux*dx(uz0) + uy*dy(uz0))*vz      
+	    - nu * ( 
+		    dx(ux)*dx(vx)   + dy(ux)*dy(vx) + kz*kz*ux*vx
+		    + dx(uy)*dx(vy) + dy(uy)*dy(vy) + kz*kz*uy*vy 
+		    + dx(uz)*dx(vz) + dy(uz)*dy(vz) + kz*kz*uz*vz 
+		     )
+	    + p*(dx(vx)+ dy(vy) - 1i*kz*vz)
+	    - q*(dx(ux)+ dy(uy) + 1i*kz*uz)
+	    - p*q*(0.000001) 
+	    );
+
+
+// Mass matrix
+varf Mass([ux,uy,uz,p],[vx,vy,vz,q]) = 
+  int2d(Th)(ux*vx+uy*vy+uz*vz);
+// Norm
+varf Norm([ux,uy,uz,p],[vx,vy,vz,q]) = 
+  int2d(Th)(ux*vx+uy*vy+uz*vz);
+// Forcing
+varf ForcingMass([ux,uy,uz,p],[vx,vy,vz,q]) = 
+  int2d(Th)(ux*vx+uy*vy+uz*vz);

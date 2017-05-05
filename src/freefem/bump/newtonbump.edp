@@ -1,0 +1,89 @@
+// Define an initial mesh
+border a0(t=0,100)                       { x=t;     y=2*exp(-(x-30.)^2/3.^2);  label=3;} // axis
+border a1(t=0,10)    { x=100;   y=t;  label=4;} // outflow
+border a2(t=100,0)                       { x=t;     y=10; label=1;} // 
+border a3(t=10,0)     { x=0;     y=t;  label=2;} // solid wall
+
+// Define an initial mesh
+int n=10;
+mesh Th= buildmesh(a0(10*n)+a1(2*n)+a2(10*n)+a3(2*n));
+
+
+//plot(Th,wait= 1);
+real nu = 0.01;
+
+fespace Xh(Th,P2);
+fespace Mh(Th,P1);
+
+int  i=0;
+include "../varf/rect/varf.edp"
+
+real residual = 1;
+int nmaxiter = 20;
+real tol = 1e-5;
+real t1, t2;
+
+ux0p =tanh((y - 2*exp(-(x-30.)^2/3.^2))/.25) ;
+
+//plot(ux0p,wait = 1);
+
+uy0p = 0.;
+p0p  = 0.;
+
+real error=0.01;
+
+for (int j=0;j<2;j++){
+  Th=adaptmesh(Th,[ux0p,uy0p],err=error,hmax=5);
+  residual = 1;
+  i = 0;
+  while(residual > tol && i < nmaxiter){
+    t1 = clock();
+    NewtonNS;
+    t2 = clock();
+    ux0p = ux0p + ux0;
+    uy0p = uy0p + uy0;
+    p0p  = p0p  + p0 ;
+    residual = int2d(Th)(ux0^2+uy0^2)/int2d(Th)(ux0p^2+uy0p^2);
+    i = i +1;
+    cout << "Newton iter: " << i << "  residual  " << residual << " time to solve " << t2-t1 << endl;
+  }
+  plot(coef=0.2,cmm=" ux ",value=1, fill=1,ux0p,Th);
+ }
+
+savemesh(Th,"../data/mesh0.msh");
+{ ofstream file("../data/ux0.dat");
+  file << ux0p[] << endl;
+} 
+{ ofstream file("../data/uy0.dat");
+  file << uy0p[] << endl;
+} 
+{ ofstream file("../data/p0.dat");
+  file << p0p[] << endl;
+} 
+
+// Same some mesh features for use in python
+{ ofstream file("../data/coordinates.dat");
+  for (int j=0;j<Th.nv; j++) {
+    file << Th(j).x << " " << Th(j).y<< endl;}
+}
+{ ofstream file("../data/connectivity.dat");
+  int nbtriangle = Th.nt;
+  for (int i=0;i<Th.nt; i++){
+    file << Th[i][0]+1 << " " << Th[i][1]+1 << " " << Th[i][2]+1 << endl;}
+}
+
+mesh Th2 = splitmesh(Th,2);
+savemesh(Th2,"../data/mesh-2.msh");
+
+{ ofstream file("../data/coordinates-2.dat");
+  for (int j=0;j<Th2.nv; j++) {
+    file << Th2(j).x << " " << Th2(j).y<< endl;}
+}
+
+{ ofstream file("../data/connectivity-2.dat");
+  int nbtriangle = Th2.nt;
+  for (int i=0;i<Th2.nt; i++){
+    file << Th2[i][0]+1 << " " << Th2[i][1]+1 << " " << Th2[i][2]+1 << endl;}
+}
+
+plot(coef=0.2,cmm=" ux ",value=1, fill=1,ux0p,wait = 1);

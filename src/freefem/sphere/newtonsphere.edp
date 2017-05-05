@@ -1,0 +1,109 @@
+include "params.edp"
+
+border a00(t=xmin,-.5)    { x=t     ; y=0     ;  label=1;} // axis
+border a1 (t=pi,0)        { x=.5*cos(t); y=.5*sin(t);  label=3;} // axis
+border a01(t= .5, xmax)   { x=t     ; y=0     ;  label=1;} // axis
+border a2(t=0,rmax)       { x=xmax;    y=t;  label=2;}
+border a3(t=xmax,xmin)    { x=t;    y=rmax;  label=2;}
+border a4(t=rmax,0)       { x=xmin;    y=t;  label=4;}
+
+// Define an initial mesh
+int n=5;
+mesh Th= buildmesh(a00(10*n)+a1(4*n)+a01(50*n)+a2(10*n)+a3(60*n)+a4(10*n));
+// mesh Th = readmesh("../nl/mesh0.msh");
+
+plot(Th,wait = 1);
+fespace Xh(Th,P2);
+fespace Mh(Th,P1);
+
+int  i=0;
+
+macro bcaxis on(1,ux=0,p=0) // useless for NL computations
+include "../varf/axi/varf.edp"
+
+real residual = 1;
+int nmaxiter = 20;
+real tol = 1e-10;
+real t1, t2;
+
+ux0p = 1-exp(-(sqrt(x^2+y^2)-.5)/.5);
+ur0p = 0.;
+p0p  = 0.;
+
+plot(ux0p,wait = 1);
+
+for (int j=0;j<5;j++){
+  real re = Re0 +(Re-Re0)*(j+1)/5.;
+  nu = 1./re;
+  cout << 1./nu << endl;
+  Th=adaptmesh(Th,[ux0p,ur0p],hmax=2.,nbvx=10000);
+  residual = 1;
+  i = 0;
+  while(residual > tol && i < nmaxiter){
+    t1 = clock();
+    NewtonNS;
+    t2 = clock();
+    ux0p = ux0p + ux0;
+    ur0p = ur0p + ur0;
+    p0p  = p0p  + p0 ;
+    residual = int2d(Th)(ux0^2+ur0^2)/int2d(Th)(ux0p^2+ur0p^2);
+    i = i +1;
+    cout << "Newton iter: " << i << "  residual  " << residual << " time to solve " << t2-t1 << endl;
+  }
+  plot(coef=0.2,cmm=" ux ",value=1, fill=1,Th,ux0p);
+ }
+
+Th = splitmesh(Th,1+2*(y < 3)*(x>-2)*(x<10));
+plot(coef=0.2,cmm=" ux ",value=1, fill=1,Th  ,wait = 1);
+
+residual = 1;
+i = 0;
+while(residual > tol && i < nmaxiter){
+  t1 = clock();
+  NewtonNS;
+  t2 = clock();
+  ux0p = ux0p + ux0;
+  ur0p = ur0p + ur0;
+  p0p  = p0p  + p0 ;
+  residual = int2d(Th)(ux0^2+ur0^2)/int2d(Th)(ux0p^2+ur0p^2);
+  i = i +1;
+  cout << "Newton iter: " << i << "  residual  " << residual << " time to solve " << t2-t1 << endl;
+ }
+
+savemesh(Th,dir+"/base/mesh0.msh");
+{ ofstream file(dir+"/base/ux0.dat");
+  file << ux0p[] << endl;
+} 
+{ ofstream file(dir+"/base/ur0.dat");
+  file << ur0p[] << endl;
+} 
+{ ofstream file(dir+"/base/p0.dat");
+  file << p0p[] << endl;
+} 
+
+// Same some mesh features for use in python
+{ ofstream file(dir+"/base/coordinates.dat");
+  for (int j=0;j<Th.nv; j++) {
+    file << Th(j).x << " " << Th(j).y<< endl;}
+}
+{ ofstream file(dir+"/base/connectivity.dat");
+  int nbtriangle = Th.nt;
+  for (int i=0;i<Th.nt; i++){
+    file << Th[i][0]+1 << " " << Th[i][1]+1 << " " << Th[i][2]+1 << endl;}
+}
+
+mesh Th2 = splitmesh(Th,2);
+savemesh(Th2,dir+"/base/mesh-2.msh");
+
+{ ofstream file(dir+"/base/coordinates-2.dat");
+  for (int j=0;j<Th2.nv; j++) {
+    file << Th2(j).x << " " << Th2(j).y<< endl;}
+}
+
+{ ofstream file(dir+"/base/connectivity-2.dat");
+  int nbtriangle = Th2.nt;
+  for (int i=0;i<Th2.nt; i++){
+    file << Th2[i][0]+1 << " " << Th2[i][1]+1 << " " << Th2[i][2]+1 << endl;}
+}
+
+plot(coef=0.2,cmm=" ux ",value=1, fill=1,ux0p,wait = 1);

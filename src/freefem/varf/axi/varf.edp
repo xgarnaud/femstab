@@ -1,0 +1,117 @@
+// Variational formulations for NS equations in cylindrical coordinates 
+
+Xh<complex> ur,vr;
+Xh<complex> ux,vx; 
+Xh<complex> ut,vt; 
+Mh<complex> p,q;
+Xh<complex> upx,upr,upt; 
+Xh ux0,ur0;
+Mh p0;
+Xh ux0p,ur0p; 
+Mh p0p;
+Xh ux0b,ur0b; 
+Xh ux0pb,ur0pb; 
+Xh vx0,vr0;
+Mh q0;
+real uref;
+
+// Non linear time stepping, 1st order 
+problem NS([ux0,ur0,p0],[vx0,vr0,q0],init=i) = 
+  int2d(Th)(alpha*( y^2*ux0*vx0+y^2*ur0*vr0)
+	    + nu * sponge(x) * ( y^2*dx(ux0)*dx(vx0) + y^2*dy(ux0)*dy(vx0)+ y*dy(ux0)*vx0 +
+				 y^2*dx(ur0)*dx(vr0) + y^2*dy(ur0)*dy(vr0)+ y*dy(ur0)*vr0 + ur0*vr0)
+	    + p0*q0*(0.000001) 
+	    + p0*( y^2*dx(vx0) + y^2*dy(vr0) + 2*y*vr0 )
+	    + q0*( y*dy(ur0) + ur0 + y*dx(ux0) )
+	    )
+  + int2d(Th)(- alpha*y^2*(convect([ux0p,ur0p],-dt,ux0p)*vx0 +
+			   convect([ux0p,ur0p],-dt,ur0p)*vr0)
+	      )
+  + on(1,ur0=0) + on(3,ux0=0,ur0=0) + on(4,ux0=inflow(y),ur0=0);
+
+// Selective frequency damping, see Akervik et al. 2006
+problem NSSFD([ux0,ur0,p0],[vx0,vr0,q0],init=i) =
+  int2d(Th)(alpha*( y^2*ux0*vx0+y^2*ur0*vr0)
+	    + nu * sponge(x) * ( y^2*dx(ux0)*dx(vx0) + y^2*dy(ux0)*dy(vx0)+ y*dy(ux0)*vx0 +
+				 y^2*dx(ur0)*dx(vr0) + y^2*dy(ur0)*dy(vr0)+ y*dy(ur0)*vr0 + ur0*vr0
+				 )
+	    + p0*q0*(0.000001) 
+	    + p0*( y^2*dx(vx0) + y^2*dy(vr0) + 2*y*vr0 )
+	    + q0*( y*dy(ur0) + ur0 + y*dx(ux0) ) 
+	    + y^2*tau*(ux0*vx0 + ur0*vr0))
+  + int2d(Th)(- alpha*y^2*(convect([ux0p,ur0p],-dt,ux0p)*vx0 +
+			   convect([ux0p,ur0p],-dt,ur0p)*vr0)
+	      - tau*y^2*(ux0pb*vx0 + ur0pb*vr0))
+  + on(1,ur0=0) + on(3,ux0=0,ur0=0) + on(4,ux0=inflow(y),ur0=0);
+
+// Newton solver
+problem NewtonNS([ux0,ur0,p0],[vx0,vr0,q0]) =
+  int2d(Th)(  (y^2*(ur0*dy(ux0p) + ur0p*dy(ux0) + ux0*dx(ux0p) + ux0p*dx(ux0)))*vx0
+	      + (y^2*(ur0*dy(ur0p) + ur0p*dy(ur0) + ux0*dx(ur0p) + ux0p*dx(ur0)))*vr0
+	      + nu * ( y^2*dx(ux0)*dx(vx0) + y^2*dy(ux0)*dy(vx0)+ y*dy(ux0)*vx0 +
+		       y^2*dx(ur0)*dx(vr0) + y^2*dy(ur0)*dy(vr0)+ y*dy(ur0)*vr0 + ur0*vr0
+		       )
+	      - p0*( y^2*dx(vx0) + y^2*dy(vr0) + 2*y*vr0)
+	      - q0*( y*dy(ur0) + ur0 + y*dx(ux0) )
+	      - p0*q0*(0.000001) 
+	      )
+  + int2d(Th)(  (y^2*(ur0p*dy(ux0p) + ux0p*dx(ux0p)))*vx0
+		+ (y^2*(ur0p*dy(ur0p) + ux0p*dx(ur0p)))*vr0
+		+ nu * ( y^2*dx(ux0p)*dx(vx0) + y^2*dy(ux0p)*dy(vx0)+ y*dy(ux0p)*vx0 +
+			 y^2*dx(ur0p)*dx(vr0) + y^2*dy(ur0p)*dy(vr0)+ y*dy(ur0p)*vr0 + ur0p*vr0
+			 )
+		- p0p*( y^2*dx(vx0) + y^2*dy(vr0) + 2*y*vr0)
+		- q0*( y*dy(ur0p) + ur0p + y*dx(ux0p) )
+		- p0p*q0*(0.000001) 
+		)
+  + on(1,ur0=0) + on(3,4,ux0=0,ur0=0);
+
+// Linearized operators
+
+// Stress Free
+varf LNS([ux,ur,ut,p],[vx,vr,vt,q]) = // linearized NS equations without swirl in base flow
+  int2d(Th)(- (y^2*(ur*dy(ux0) + ur0*dy(ux) + ux*dx(ux0) + ux0*dx(ux))             )*vx
+	    - (y^2*(ur*dy(ur0) + ur0*dy(ur) + ux*dx(ur0) + ux0*dx(ur))             )*vr
+	    - (y^2*(             ur0*dy(ut)              + ux0*dx(ut)) + (y*ut*ur0))*vt
+	    - nu * sponge(x) *( y^2*dx(ux)*dx(vx) + y^2*dy(ux)*dy(vx)+ y*dy(ux)*vx +     mt^2*ux*vx +
+				y^2*dx(ur)*dx(vr) + y^2*dy(ur)*dy(vr)+ y*dy(ur)*vr + (mt^2+1)*ur*vr + 2i*mt*ut*vr +
+				y^2*dx(ut)*dx(vt) + y^2*dy(ut)*dy(vt)+ y*dy(ut)*vt + (mt^2+1)*ut*vt - 2i*mt*ur*vt
+				)
+	    + p*( y^2*dx(vx) + y^2*dy(vr) + 2*y*vr - y*1i*mt*vt )
+	    - q*( y  *dx(ux) + y  *dy(ur) +     ur +   1i*mt*ut )
+	    - q*p*0.000001
+	    );
+
+varf Mass([ux,ur,ut,p],[vx,vr,vt,q]) = //
+  int2d(Th)(y^2*(ux*vx+ur*vr+ut*vt));
+
+// // Convective outflow
+// varf LNS([ux,ur,ut,p],[vx,vr,vt,q]) = // linearized NS equations without swirl in base flow
+//   int2d(Th)(- (y^2*(ur*dy(ux0) + ur0*dy(ux) + ux*dx(ux0) + ux0*dx(ux))              + y^2*dx(p))*vx
+// 	    - (y^2*(ur*dy(ur0) + ur0*dy(ur) + ux*dx(ur0) + ux0*dx(ur))                         )*vr
+// 	    - (y^2*(             ur0*dy(ut)              + ux0*dx(ut)) + (y*ut*ur0) + y*1i*mt*p)*vt
+// 	    - nu * sponge(x) *( y^2*dx(ux)*dx(vx) + y^2*dy(ux)*dy(vx)+ y*dy(ux)*vx +     mt^2*ux*vx +
+// 				y^2*dx(ur)*dx(vr) + y^2*dy(ur)*dy(vr)+ y*dy(ur)*vr + (mt^2+1)*ur*vr + 2i*mt*ut*vr +
+// 				y^2*dx(ut)*dx(vt) + y^2*dy(ut)*dy(vt)+ y*dy(ut)*vt + (mt^2+1)*ut*vt - 2i*mt*ur*vt
+// 				)
+// 	    + p*(y^2*dy(vr) + 2*y*vr)
+// 	    - q*( y  *dx(ux) + y  *dy(ur) +     ur +   1i*mt*ut )
+// 	    + q*p*0.000001
+// 	    );
+
+// varf Mass([ux,ur,ut,p],[vx,vr,vt,q]) = //
+//   int2d(Th)(y^2*(ux*vx+ur*vr+ut*vt))
+//   + int1d(Th,22)(y^2*nu*(ux*vx+ur*vr+ut*vt)/(abs(ux0)+1e-10));
+
+// // varf Mass([ux,ur,ut,p],[vx,vr,vt,q]) = //
+// //   int2d(Th)(y^2*(ux*vx+ur*vr+ut*vt))
+// //   + int1d(Th,22)(y^2*nu*(ux*vx+ur*vr+ut*vt)/(.5*uref+1e-10));
+
+// Norm
+varf Norm([ux,ur,ut,p],[vx,vr,vt,q]) = //
+  int2d(Th)(  y*(ux*vx+ur*vr+ut*vt));
+
+// Forcing localization in space
+varf ForcingMass([ux,ur,ut,p],[vx,vr,vt,q]) = //
+  int2d(Th)(phi(x)*y^2*(ux*vx+ur*vr+ut*vt));
+

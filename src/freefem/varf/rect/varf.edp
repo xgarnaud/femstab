@@ -1,0 +1,81 @@
+// Variational formulations for NS equations in cartesian coordinates 
+// 2 velocity components
+Xh<complex> uy,vy;
+Xh<complex> ux,vx; 
+Xh<complex> ut,vt; 
+Mh<complex> p,q;
+Xh<complex> upx,upy,upt; 
+Xh ux0,uy0;
+Mh p0;
+Xh ux0p,uy0p; 
+Mh p0p;
+Xh ux0b,uy0b; 
+Xh ux0pb,uy0pb; 
+Xh vx0,vy0;
+Mh q0;
+
+// Stokes problem
+problem Stokes([ux0,uy0,p0],[vx0,vy0,q0]) =
+  int2d(Th)(nu*(dx(ux0)*dx(vx0)+dy(ux0)*dy(vx0)
+		+dx(uy0)*dx(vy0)+dy(uy0)*dy(vy0))
+	    - p0*dx(vx0)- p0*dy(vy0) 
+	    + dx(ux0)*q0+ dy(uy0)*q0 
+	    + p0*q0*(0.000001) 
+	    )
+  + on(3, ux0=0., uy0=0.)	// 3 = floor
+  + on(4, ux0=0., uy0=-1.)	// 2 = inlet 		
+  + on(1, ux0=0., uy0=0.)	// 1 = top
+  ;
+
+
+// Newton iteration for Navier-Stokes
+problem NewtonNS([ux0,uy0,p0],[vx0,vy0,q0]) =
+  int2d(Th)(nu*(dx(ux0)*dx(vx0)+dy(ux0)*dy(vx0)
+		+dx(uy0)*dx(vy0)+dy(uy0)*dy(vy0))
+	    + vx0*(ux0*dx(ux0p)+uy0*dy(ux0p)+ux0p*dx(ux0)+uy0p*dy(ux0))
+	    + vy0*(ux0*dx(uy0p)+uy0*dy(uy0p)+ux0p*dx(uy0)+uy0p*dy(uy0))
+	    //	+ dx(p)*vx+dy(p)*vy		// don't integrate pressure term by part => natural BC is du/dn  =0 
+	    - p0*(dx(vx0)+dy(vy0))		// OR:   integrate pressure term by part => natural BC is du/dn-p=0
+	    - q0*(dx(ux0)+dy(uy0))
+	    )
+  + int2d(Th)(nu*(dx(ux0p)*dx(vx0)+dy(ux0p)*dy(vx0)
+		 +dx(uy0p)*dx(vy0)+dy(uy0p)*dy(vy0))
+	     + vx0*(ux0p*dx(ux0p)+uy0p*dy(ux0p))
+	     + vy0*(ux0p*dx(uy0p)+uy0p*dy(uy0p))
+	     //	+ dx(pp)*vx+dy(pp)*vy		// don't integrate pressure by part => natural BC is du/dn  =0 
+	     - p0p*(dx(vx0)+dy(vy0))		// OR:   integrate pressure by part => natural BC is du/dn-p=0
+	     - q0*(dx(ux0p)+dy(uy0p))
+	     //	- (1e-10)*pp*q
+	     )
+  + on(3, ux0=0., uy0=0.)	// 3 = floor
+  + on(4, ux0=0., uy0=0.)	// 2 = inlet 		
+  ///+ on(4, uy0=0.)	// 2 = inlet 		
+  + on(1, ux0=0., uy0=0.)	// 1 = top
+  ;
+
+// Linearized Navier-Stokes operator
+varf LNS([ux,uy,p],[vx,vy,q]) =
+  int2d(Th)(
+	    - nu*(dx(ux)*dx(vx)+dy(ux)*dy(vx)
+		  +dx(uy)*dx(vy)+dy(uy)*dy(vy))
+	    - vx*(ux*dx(ux0)+uy*dy(ux0)+ux0*dx(ux)+uy0*dy(ux))
+	    - vy*(ux*dx(uy0)+uy*dy(uy0)+ux0*dx(uy)+uy0*dy(uy))
+	    //	+ dx(p)*vx+dy(p)*vy		// don't integrate pressure term by part => natural BC is du/dn  =0 
+	    + p*(dx(vx)+dy(vy))		// OR:   integrate pressure term by part => natural BC is du/dn-p=0
+	    - q*(dx(ux)+dy(uy))
+	    - q*p*0.000001
+	    )
+  ;
+
+
+// Mass matrix
+varf Mass([ux,uy,p],[vx,vy,q]) = //
+  int2d(Th)(ux*vx+uy*vy);
+
+// Norm
+varf Norm([ux,uy,p],[vx,vy,q]) = //
+  int2d(Th)(ux*vx+uy*vy);
+
+// Forcing
+varf ForcingMass([ux,uy,p],[vx,vy,q]) = //
+  int2d(Th)(ux*vx+uy*vy);

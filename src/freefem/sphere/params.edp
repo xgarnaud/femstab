@@ -1,0 +1,21 @@
+string dir = "../../../sphere/";
+
+real alpha = 1., dt = 1.,tau = 1.; // useless
+real Re    = 280.7;
+real Re0   = 150.;
+real nu    = 1./Re;
+real xmin  = -100;
+real xmax  = 200;
+real rmax  = 25;
+
+int mt = 1;
+
+func real sponge(real t){
+  return 1.;
+}
+func real inflow(real t){
+  return 1.;
+}
+func real phi(real t){
+  return 1.;
+}

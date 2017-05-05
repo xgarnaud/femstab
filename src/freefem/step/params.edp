@@ -1,0 +1,11 @@
+// Parameters for the step problem
+
+// Output directory
+string	 dir = "../../../step/";
+
+// Viscosity (1/Re)
+real nu = 1./500.;
+
+// Dimensions of the computational domain
+real xmin = -10.;
+real xmax = 50.;

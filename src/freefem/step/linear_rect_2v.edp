@@ -1,0 +1,80 @@
+include "params.edp"
+
+string basedir=dir+"/base/";
+string outdir=dir+"/lin/";
+
+// read the mesh from the non-linear computation
+mesh Th = readmesh(basedir+"mesh0.msh");
+fespace Xh(Th,P2);
+fespace Mh(Th,P1);
+
+int  i=0;
+// import variational formulations
+include "../varf/rect/varf.edp"
+
+// read the base state previously computed 
+{ 
+  ifstream file(basedir+"ux0.dat");
+  file >> ux0[] ;}
+{ ifstream file(basedir+"uy0.dat");
+  file >> uy0[] ;}
+
+plot(ux0,fill = 1,wait = 1,cmm = "ux0");
+plot(uy0,fill = 1,wait = 1,cmm = "uy0");
+
+// Define the FE space corresponding to all fileds (ux, uy and p)
+fespace Vh(Th,[P2,P2,P1]);
+
+// Get some information about the the state vector components (field, position)
+Vh [iu1,iu2,iu3] = [0,1,2];
+Vh [u1x,u2x,u3x] = [x,x,x];
+Vh [u1y,u2y,u3y] = [y,y,y];
+
+// Get the base state as a state vector
+Vh [u1b,u2b,u3b] = [ux0,uy0,p0];
+
+real tgv = 1e30;
+
+// Build the matrices 
+cout << "Assemble matrices" << endl;
+matrix<complex> L = LNS(Vh,Vh,tgv=tgv);
+matrix<complex> B     = Mass(Vh,Vh,tgv=tgv);
+matrix<complex> B2    = ForcingMass(Vh,Vh,tgv=tgv);
+matrix<complex> Q     = Norm(Vh,Vh,tgv=tgv);
+
+// To get the points on which dirichlet BCs are applied
+varf bcvar([ux,uy,p],[vx,vy,q]) =  
+  on(3,4,ux=1,uy=1) ;
+real[int] bcdir	= bcvar(0,Vh); 
+
+// Save all the information
+cout << "Write files "<< endl;
+{ofstream file(outdir+"LNS.dat");
+  file << L <<endl;
+}
+{ofstream file(outdir+"B.dat");
+  file << B <<endl;
+}
+
+{ofstream file(outdir+"B2.dat");
+  file << B2 <<endl;
+}
+
+{ofstream file(outdir+"Q.dat");
+  file << Q <<endl;
+}
+
+{ofstream file(outdir+"BC.dat");
+  for (int j=0;j<bcdir.n; j++)
+    file << bcdir[j] << endl;
+}
+
+{ofstream file(outdir+"dofs.dat");
+  for (int j=0;j<iu1[].n; j++)
+    file << iu1[][j] << " "<< u1x[][j] << " " << u1y[][j] << endl;
+}
+
+{ofstream file(outdir+"base.dat");
+  for (int j=0;j<iu1[].n; j++)
+    file << u1b[][j] << endl;
+}
